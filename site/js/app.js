@@ -15,7 +15,8 @@
   const OSM = '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>';
   const BASEMAPS = {
     osm: { attr: OSM },
-    gsi: { attr: '<a href="https://github.com/gsi-cyberjapan/optimal_bvmap" target="_blank" rel="noopener">出典：国土地理院最適化ベクトルタイル</a>' },
+    gsi: { attr: '<a href="https://github.com/gsi-cyberjapan/optimal_bvmap" target="_blank" rel="noopener">出典：国土地理院最適化ベクトルタイル</a>（標準地図風）' },
+    gsipale: { attr: '<a href="https://github.com/gsi-cyberjapan/optimal_bvmap" target="_blank" rel="noopener">出典：国土地理院最適化ベクトルタイル</a>（淡色地図風）' },
     photo: { attr: GSI + "（写真）" },
   };
   const GSI_BASE = "https://gsi-cyberjapan.github.io/optimal_bvmap/";
@@ -55,7 +56,7 @@
 
   const state = {
     day: initialDay(),
-    basemap: { pale: "gsi" }[store.get("ta.basemap")] || (BASEMAPS[store.get("ta.basemap")] ? store.get("ta.basemap") : "osm"),
+    basemap: { pale: "gsipale" }[store.get("ta.basemap")] || (BASEMAPS[store.get("ta.basemap")] ? store.get("ta.basemap") : "osm"),
     annoOff: new Set((store.get("ta.annoOff") || "").split(",").filter(Boolean)),
     annoPanel: false,
     cats: new Set(Object.keys(CATS)),
@@ -127,25 +128,30 @@
     $("grip").setAttribute("aria-expanded", String(!c));
   });
 
-  // ---------- GSI vector basemap (loaded into the same style, below the overlays) ----------
-  let gsiLayers = [];      // layer ids we added
-  const annoFilters = {};  // original filter of every Anno symbol layer
-  const gsiReady = fetch("data/gsi_std.json").then((r) => r.json()).then((st) => new Promise((resolve) => {
-    const add = () => {
-      map.addSource("gsi", st.sources.v);
-      const before = map.getLayer("uncertain-fill") ? "uncertain-fill" : undefined;
-      st.layers.forEach((l) => {
-        const layer = { ...l, id: "gsi-" + l.id, layout: { ...(l.layout || {}), visibility: state.basemap === "gsi" ? "visible" : "none" } };
-        if (l.source) layer.source = "gsi";
-        if (l["source-layer"] === "Anno" && l.type === "symbol") annoFilters[layer.id] = l.filter;
-        map.addLayer(layer, before);
-        gsiLayers.push(layer.id);
-      });
-      applyAnno();
-      resolve();
-    };
-    styleReady ? add() : map.once("style.load", add);
-  })).catch((e) => console.error("GSI style failed", e));
+  // ---------- GSI vector basemaps (loaded into the same style, below the overlays) ----------
+  // Both styles read the same PMTiles source and share layer names, so annotation groups apply to either.
+  const GSI_STYLES = { gsi: "data/gsi_std.json", gsipale: "data/gsi_pale.json" };
+  const isGsi = (id) => id in GSI_STYLES;
+  const gsiLayers = { gsi: [], gsipale: [] }; // layer ids we added, per basemap
+  const annoFilters = {};                      // original filter of every Anno symbol layer
+  const gsiReady = Promise.all(Object.entries(GSI_STYLES).map(([key, url]) =>
+    fetch(url).then((r) => r.json()).then((st) => [key, st])))
+    .then((styles) => new Promise((resolve) => {
+      const add = () => {
+        map.addSource("gsi", styles[0][1].sources.v);
+        const before = map.getLayer("uncertain-fill") ? "uncertain-fill" : undefined;
+        styles.forEach(([key, st]) => st.layers.forEach((l) => {
+          const layer = { ...l, id: key + "-" + l.id, layout: { ...(l.layout || {}), visibility: state.basemap === key ? "visible" : "none" } };
+          if (l.source) layer.source = "gsi";
+          if (l["source-layer"] === "Anno" && l.type === "symbol") annoFilters[layer.id] = l.filter;
+          map.addLayer(layer, before);
+          gsiLayers[key].push(layer.id);
+        }));
+        applyAnno();
+        resolve();
+      };
+      styleReady ? add() : map.once("style.load", add);
+    })).catch((e) => console.error("GSI style failed", e));
 
   // hide codes of switched-off groups; a zoom "step" filter must stay top-level, so wrap each branch
   function withoutCodes(filter, codes) {
@@ -158,21 +164,23 @@
   }
 
   function applyAnno() {
-    if (!gsiLayers.length) return;
+    if (!gsiLayers.gsi.length) return;
     const off = ANNO_GROUPS.filter((g) => state.annoOff.has(g.key));
     const codes = off.flatMap((g) => g.codes);
     Object.entries(annoFilters).forEach(([id, f]) => map.setFilter(id, withoutCodes(f, codes)));
-    const vis = state.basemap === "gsi" ? "visible" : "none";
-    ANNO_GROUPS.filter((g) => g.layers).forEach((g) => g.layers.forEach((l) => {
-      if (map.getLayer("gsi-" + l)) map.setLayoutProperty("gsi-" + l, "visibility", state.annoOff.has(g.key) ? "none" : vis);
-    }));
+    Object.keys(GSI_STYLES).forEach((key) => {
+      const vis = state.basemap === key ? "visible" : "none";
+      ANNO_GROUPS.filter((g) => g.layers).forEach((g) => g.layers.forEach((l) => {
+        if (map.getLayer(key + "-" + l)) map.setLayoutProperty(key + "-" + l, "visibility", state.annoOff.has(g.key) ? "none" : vis);
+      }));
+    });
   }
 
   function setBasemap(id) {
     state.basemap = id;
     store.set("ta.basemap", id);
     ["osm", "photo"].forEach((k) => map.setLayoutProperty("bm-" + k, "visibility", k === id ? "visible" : "none"));
-    gsiLayers.forEach((l) => map.setLayoutProperty(l, "visibility", id === "gsi" ? "visible" : "none"));
+    Object.entries(gsiLayers).forEach(([key, ids]) => ids.forEach((l) => map.setLayoutProperty(l, "visibility", key === id ? "visible" : "none")));
     applyAnno();
     if (data.shops) renderChips();
     document.querySelectorAll("[data-basemap]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.basemap === id)));
@@ -255,7 +263,7 @@
     // GSI vector annotations: one chip opens the group switches
     const aw = $("annoChips");
     aw.textContent = "";
-    if (state.basemap === "gsi") {
+    if (isGsi(state.basemap)) {
       const t = document.createElement("button");
       t.type = "button";
       t.className = "chip";

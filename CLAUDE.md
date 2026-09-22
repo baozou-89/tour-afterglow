@@ -14,7 +14,7 @@ Public GitHub Pages site: a mobile map of shopping spots for the free time after
 
 ## Layout
 - `site/index.html`, `site/css/tokens.css` (design tokens), `site/css/app.css`, `site/js/days.js` (per-day title/area/bounds), `site/js/app.js` (MapLibre GL JS app).
-- Basemaps: OSM raster, GSI optimal vector tiles (PMTiles, style pinned in `site/data/gsi_std.json`, glyphs/sprite from gsi-cyberjapan.github.io), GSI aerial photo raster. GSI annotations can be switched off by group — the groups (`ANNO_GROUPS` in `app.js`) are lists of `vt_code` from GSI's 注記分類コード table (https://maps.gsi.go.jp/help/pdf/vector/optbv_featurecodes.pdf).
+- Basemaps: OSM raster, GSI optimal vector tiles in 標準 and 淡色 styles (PMTiles; styles pinned in `site/data/gsi_std.json` from gsi-cyberjapan/optimal_bvmap and `site/data/gsi_pale.json` from gsi-cyberjapan/3dpc-3dtiles, glyphs/sprite from gsi-cyberjapan.github.io), GSI aerial photo raster. GSI annotations can be switched off by group — the groups (`ANNO_GROUPS` in `app.js`) are lists of `vt_code` from GSI's 注記分類コード table (https://maps.gsi.go.jp/help/pdf/vector/optbv_featurecodes.pdf).
 - `site/data/*.geojson` — public data the page loads:
   - `pois.geojson` — sights/stations/malls + base intersections. props: `id, name, kind (sight|station|mall|airport|base), days[], gmaps_url?`
   - `uncertain.geojson` — places whose location is unknown, drawn as dashed circles. props: `name, days[], radius_m, note`
