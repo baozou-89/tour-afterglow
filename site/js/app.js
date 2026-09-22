@@ -15,9 +15,26 @@
   const OSM = '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>';
   const BASEMAPS = {
     osm: { attr: OSM },
-    pale: { attr: GSI + "（淡色地図）" },
+    gsi: { attr: '<a href="https://github.com/gsi-cyberjapan/optimal_bvmap" target="_blank" rel="noopener">出典：国土地理院最適化ベクトルタイル</a>' },
     photo: { attr: GSI + "（写真）" },
   };
+  const GSI_BASE = "https://gsi-cyberjapan.github.io/optimal_bvmap/";
+
+  // GSI vector annotations (Anno source-layer), grouped by vt_code (注記分類コード, optbv_featurecodes.pdf)
+  const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+  const ANNO_GROUPS = [
+    { key: "place", label: "地名・町名", codes: [110, 120, 130, 140, 210, 220, 800, 1301, 1302, 1303, 1401, 1402, 1403] },
+    { key: "station", label: "鐵道・車站", codes: [421, 422, 423] },
+    { key: "road", label: "道路名・IC", codes: [411, 412, 413, 2901, 2903, 2904, ...range(2941, 2945)] },
+    { key: "port", label: "港口・機場", codes: [431, 432, 441, 6361, 6362, 6367, 6368, 6371, 6373, 6375, 6376] },
+    { key: "public", label: "公家機關・學校・醫院", codes: [...range(611, 634), ...range(880, 890), 621, ...range(3201, 3244), 6381] },
+    { key: "shrine", label: "寺社・名勝・公園", codes: [532, 534, 651, 661, 662, 860, 870, 3231, 3232, 6341, 6342] },
+    { key: "building", label: "商業・建物・構造物", codes: [511, 521, 522, 523, 531, 533, 653, 671, 673, 681, 720, 899,
+      3261, ...range(4101, 4105), 6301, 8103, 8105] },
+    { key: "nature", label: "山川・海岸", codes: [...range(311, 361), ...range(810, 850), 5801, 6331, 6332] },
+    { key: "symbol", label: "植生・三角點・標高", codes: [...range(6311, 6327), 6351, 7101, 7102, 7103, 7201, 7221, 7601, 7621, 7701, 7711],
+      layers: ["等高線数値部", "等深線数値部", "水部表記線point"] },
+  ];
   const EXTRA_ATTR = "路線 © OSRM／" + OSM + "・商家資料 © Google";
 
   const store = {
@@ -38,7 +55,9 @@
 
   const state = {
     day: initialDay(),
-    basemap: BASEMAPS[store.get("ta.basemap")] ? store.get("ta.basemap") : "osm",
+    basemap: { pale: "gsi" }[store.get("ta.basemap")] || (BASEMAPS[store.get("ta.basemap")] ? store.get("ta.basemap") : "osm"),
+    annoOff: new Set((store.get("ta.annoOff") || "").split(",").filter(Boolean)),
+    annoPanel: false,
     cats: new Set(Object.keys(CATS)),
     routes: true,
     transit: true,
@@ -49,6 +68,10 @@
   let markers = [];
 
   // ---------- map ----------
+  // GSI vector tiles are served as one PMTiles archive
+  const pmt = new pmtiles.Protocol();
+  maplibregl.addProtocol("pmtiles", pmt.tile);
+
   const raster = (tiles, maxzoom, attribution) => ({ type: "raster", tiles: [tiles], tileSize: 256, maxzoom, attribution });
   const map = new maplibregl.Map({
     container: "map",
@@ -58,13 +81,13 @@
     fitBoundsOptions: { padding: fitPadding() },
     style: {
       version: 8,
-      glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+      glyphs: GSI_BASE + "glyphs/{fontstack}/{range}.pbf",
+      sprite: GSI_BASE + "sprite/std",
       sources: {
         osm: raster("https://tile.openstreetmap.org/{z}/{x}/{y}.png", 19, ""),
-        pale: raster("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", 18, ""),
         photo: raster("https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg", 18, ""),
       },
-      layers: Object.keys(BASEMAPS).map((id) => ({
+      layers: ["osm", "photo"].map((id) => ({
         id: "bm-" + id, type: "raster", source: id,
         layout: { visibility: id === state.basemap ? "visible" : "none" },
       })),
@@ -104,10 +127,54 @@
     $("grip").setAttribute("aria-expanded", String(!c));
   });
 
+  // ---------- GSI vector basemap (loaded into the same style, below the overlays) ----------
+  let gsiLayers = [];      // layer ids we added
+  const annoFilters = {};  // original filter of every Anno symbol layer
+  const gsiReady = fetch("data/gsi_std.json").then((r) => r.json()).then((st) => new Promise((resolve) => {
+    const add = () => {
+      map.addSource("gsi", st.sources.v);
+      const before = map.getLayer("uncertain-fill") ? "uncertain-fill" : undefined;
+      st.layers.forEach((l) => {
+        const layer = { ...l, id: "gsi-" + l.id, layout: { ...(l.layout || {}), visibility: state.basemap === "gsi" ? "visible" : "none" } };
+        if (l.source) layer.source = "gsi";
+        if (l["source-layer"] === "Anno" && l.type === "symbol") annoFilters[layer.id] = l.filter;
+        map.addLayer(layer, before);
+        gsiLayers.push(layer.id);
+      });
+      applyAnno();
+      resolve();
+    };
+    styleReady ? add() : map.once("style.load", add);
+  })).catch((e) => console.error("GSI style failed", e));
+
+  // hide codes of switched-off groups; a zoom "step" filter must stay top-level, so wrap each branch
+  function withoutCodes(filter, codes) {
+    if (!codes.length) return filter;
+    const ex = ["!", ["in", ["get", "vt_code"], ["literal", codes]]];
+    if (Array.isArray(filter) && filter[0] === "step" && JSON.stringify(filter[1]) === '["zoom"]') {
+      return filter.map((v, i) => (i >= 2 && i % 2 === 0 ? ["all", v, ex] : v));
+    }
+    return filter ? ["all", filter, ex] : ex;
+  }
+
+  function applyAnno() {
+    if (!gsiLayers.length) return;
+    const off = ANNO_GROUPS.filter((g) => state.annoOff.has(g.key));
+    const codes = off.flatMap((g) => g.codes);
+    Object.entries(annoFilters).forEach(([id, f]) => map.setFilter(id, withoutCodes(f, codes)));
+    const vis = state.basemap === "gsi" ? "visible" : "none";
+    ANNO_GROUPS.filter((g) => g.layers).forEach((g) => g.layers.forEach((l) => {
+      if (map.getLayer("gsi-" + l)) map.setLayoutProperty("gsi-" + l, "visibility", state.annoOff.has(g.key) ? "none" : vis);
+    }));
+  }
+
   function setBasemap(id) {
     state.basemap = id;
     store.set("ta.basemap", id);
-    Object.keys(BASEMAPS).forEach((k) => map.setLayoutProperty("bm-" + k, "visibility", k === id ? "visible" : "none"));
+    ["osm", "photo"].forEach((k) => map.setLayoutProperty("bm-" + k, "visibility", k === id ? "visible" : "none"));
+    gsiLayers.forEach((l) => map.setLayoutProperty(l, "visibility", id === "gsi" ? "visible" : "none"));
+    applyAnno();
+    if (data.shops) renderChips();
     document.querySelectorAll("[data-basemap]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.basemap === id)));
     // shop dots need a darker halo on aerial photos
     if (map.getLayer("shops")) map.setPaintProperty("shops", "circle-stroke-color", id === "photo" ? "#2A2521" : "#FFFFFF");
@@ -184,6 +251,37 @@
       b.addEventListener("click", () => { state[k] = !state[k]; applyFilters(); renderMarkers(); renderChips(); });
       lw.appendChild(b);
     });
+
+    // GSI vector annotations: one chip opens the group switches
+    const aw = $("annoChips");
+    aw.textContent = "";
+    if (state.basemap === "gsi") {
+      const t = document.createElement("button");
+      t.type = "button";
+      t.className = "chip";
+      t.style.setProperty("--c", "#4A5A78");
+      t.setAttribute("aria-expanded", String(state.annoPanel));
+      t.setAttribute("aria-pressed", String(state.annoOff.size < ANNO_GROUPS.length));
+      t.textContent = "地圖註記 " + (state.annoPanel ? "▴" : "▾");
+      t.addEventListener("click", () => { state.annoPanel = !state.annoPanel; renderChips(); });
+      lw.appendChild(t);
+      if (state.annoPanel) {
+        ANNO_GROUPS.forEach((g) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "chip small";
+          b.style.setProperty("--c", "#4A5A78");
+          b.setAttribute("aria-pressed", String(!state.annoOff.has(g.key)));
+          b.textContent = g.label;
+          b.addEventListener("click", () => {
+            state.annoOff.has(g.key) ? state.annoOff.delete(g.key) : state.annoOff.add(g.key);
+            store.set("ta.annoOff", [...state.annoOff].join(","));
+            applyAnno(); renderChips();
+          });
+          aw.appendChild(b);
+        });
+      }
+    }
   }
 
   // rating weighted by review count, so a 5.0 with 3 reviews does not top the list
@@ -320,7 +418,7 @@
 
       map.addLayer({ id: "shop-labels", type: "symbol", source: "shops", layout: {
         "text-field": ["get", "name"],
-        "text-font": ["Open Sans Semibold"],
+        "text-font": ["NotoSansJP-Regular"],
         "text-size": ["interpolate", ["linear"], ["zoom"], 13, 10, 17, 13],
         "text-variable-anchor": ["left", "right", "top", "bottom"],
         "text-radial-offset": 0.8,

@@ -65,6 +65,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
   font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 6px;
 }
 .chip[aria-pressed="true"] { background: var(--c, var(--teal)); color: #fff; }
+.chip.small { height: 32px; padding: 0 10px; font-size: 13px; }
+.chips.anno:empty { display: none; }
 .chip .n { font-family: var(--font-mono); font-size: 12px; opacity: .85; }
 .chip:disabled { opacity: .35; cursor: default; background: var(--surface); color: var(--c, var(--teal)); }
 

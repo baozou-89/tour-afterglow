@@ -25,7 +25,7 @@
     </div>
     <div class="basemap" role="group" aria-label="底圖">
       <button type="button" data-basemap="osm" aria-pressed="true">OSM</button>
-      <button type="button" data-basemap="pale" aria-pressed="false">淡色</button>
+      <button type="button" data-basemap="gsi" aria-pressed="false">地理院</button>
       <button type="button" data-basemap="photo" aria-pressed="false">写真</button>
     </div>
   </div>
@@ -37,11 +37,13 @@
   <p class="area" id="dayArea"></p>
   <div class="chips" id="chips"></div>
   <div class="chips secondary" id="layerChips"></div>
+  <div class="chips anno" id="annoChips" aria-label="地理院地圖註記"></div>
   <ol class="shop-list" id="shopList"></ol>
   <p class="attrib" id="attrib"></p>
 </section>
 
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pmtiles@4.5.0/dist/pmtiles.js"></script>
 <script src="js/days.js"></script>
 <script src="js/app.js"></script>
 </body>
