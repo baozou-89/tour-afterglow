@@ -56,7 +56,7 @@
 
   const state = {
     day: initialDay(),
-    basemap: { pale: "gsipale" }[store.get("ta.basemap")] || (BASEMAPS[store.get("ta.basemap")] ? store.get("ta.basemap") : "osm"),
+    basemap: { pale: "gsipale" }[store.get("ta.basemap")] || (BASEMAPS[store.get("ta.basemap")] ? store.get("ta.basemap") : "gsipale"),
     annoOff: new Set((store.get("ta.annoOff") || "").split(",").filter(Boolean)),
     annoPanel: false,
     cats: new Set(Object.keys(CATS)),
