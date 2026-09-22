@@ -67,6 +67,7 @@
   };
   let data = {};
   let markers = [];
+  let sheetH = 0; // current bottom-sheet height (used by fitPadding before the sheet code runs)
 
   // ---------- map ----------
   // GSI vector tiles are served as one PMTiles archive
@@ -102,8 +103,8 @@
 
   function fitPadding() {
     const wide = window.innerWidth >= 900;
-    const sheet = document.getElementById("sheet");
-    const bottom = sheet ? sheet.offsetHeight + 16 : 240;
+    const el = document.getElementById("sheet");
+    const bottom = (sheetH || (el ? el.offsetHeight : 224)) + 16;
     return wide ? { top: 40, bottom: 40, left: 460, right: 60 } : { top: 140, bottom, left: 20, right: 20 };
   }
 
@@ -123,10 +124,76 @@
   document.querySelectorAll("[data-basemap]").forEach((b) =>
     b.addEventListener("click", () => setBasemap(b.dataset.basemap)));
 
-  $("grip").addEventListener("click", () => {
-    const c = $("sheet").classList.toggle("collapsed");
-    $("grip").setAttribute("aria-expanded", String(!c));
-  });
+  // ---------- bottom sheet: drag between min (itinerary line only) / mid (chips) / full (list) ----------
+  const sheet = $("sheet");
+  const SNAPS = ["min", "mid", "full"];
+  let snap = "mid";
+
+  function snapHeights() {
+    const pad = 12;
+    const handle = $("sheetHandle");
+    const min = handle.offsetTop + handle.offsetHeight + 8; // < row gap, so the chips below stay hidden
+    const rows = ["annoChips", "layerChips", "chips"].map($).filter((el) => el.offsetHeight > 0);
+    const last = rows[0] || handle;
+    const mid = Math.max(min, last.offsetTop + last.offsetHeight + pad);
+    const wide = window.innerWidth >= 900;
+    const maxFull = wide ? window.innerHeight - 180 : window.innerHeight * 0.72;
+    const full = Math.max(mid, Math.min(maxFull, mid + $("shopList").scrollHeight + pad));
+    return { min, mid, full };
+  }
+  function setSheetH(h) {
+    sheetH = Math.round(h);
+    sheet.style.height = sheetH + "px";
+    document.documentElement.style.setProperty("--sheet-h", sheetH + "px");
+  }
+  function setSnap(s) {
+    snap = s;
+    sheet.dataset.snap = s;
+    setSheetH(snapHeights()[s]);
+    $("grip").setAttribute("aria-expanded", String(s === "full"));
+  }
+  const cycle = { min: "mid", mid: "full", full: "mid" };
+
+  (() => {
+    const handle = $("sheetHandle");
+    let startY = 0, startH = 0, lastY = 0, lastT = 0, v = 0, moved = false, active = false;
+    handle.addEventListener("pointerdown", (e) => {
+      active = true; moved = false;
+      startY = lastY = e.clientY; startH = sheetH; lastT = e.timeStamp; v = 0;
+      handle.setPointerCapture(e.pointerId);
+    });
+    handle.addEventListener("pointermove", (e) => {
+      if (!active) return;
+      const dy = e.clientY - startY;
+      if (!moved && Math.abs(dy) < 5) return;
+      if (!moved) { moved = true; document.body.classList.add("dragging"); }
+      const hs = snapHeights();
+      setSheetH(Math.min(hs.full, Math.max(hs.min, startH - dy)));
+      const dt = e.timeStamp - lastT;
+      if (dt > 0) v = (e.clientY - lastY) / dt; // px/ms, + = downwards
+      lastY = e.clientY; lastT = e.timeStamp;
+    });
+    const end = () => {
+      if (!active) return;
+      active = false;
+      document.body.classList.remove("dragging");
+      if (!moved) { setSnap(cycle[snap]); return; }
+      const hs = snapHeights();
+      let target;
+      if (Math.abs(v) > 0.5) { // fling: go one step in that direction from where the finger is
+        const order = SNAPS.filter((k) => (v > 0 ? hs[k] < sheetH : hs[k] > sheetH));
+        target = v > 0 ? order[order.length - 1] || "min" : order[0] || "full";
+      } else {
+        target = SNAPS.reduce((a, k) => (Math.abs(hs[k] - sheetH) < Math.abs(hs[a] - sheetH) ? k : a), "mid");
+      }
+      setSnap(target);
+    };
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
+    // keyboard: Enter/Space on the grip button (pointer taps are handled above)
+    $("grip").addEventListener("click", (e) => { if (e.detail === 0) setSnap(cycle[snap]); });
+    window.addEventListener("resize", () => setSnap(snap));
+  })();
 
   // ---------- GSI vector basemaps (loaded into the same style, below the overlays) ----------
   // Both styles read the same PMTiles source and share layer names, so annotation groups apply to either.
@@ -223,6 +290,7 @@
   const dayShops = () => data.shops.features.filter((f) => f.properties.days.includes(state.day));
 
   function renderChips() {
+    requestAnimationFrame(() => setSnap(snap)); // chip rows may change height
     const counts = {};
     dayShops().forEach((f) => { counts[f.properties.category] = (counts[f.properties.category] || 0) + 1; });
     const wrap = $("chips");
@@ -296,6 +364,7 @@
   const score = (p) => (p.rating || 0) * Math.log10((p.user_ratings_total || 0) + 10);
 
   function renderList() {
+    requestAnimationFrame(() => setSnap(snap)); // list/chip content changed: re-measure stops
     const ol = $("shopList");
     ol.textContent = "";
     dayShops()
@@ -310,8 +379,7 @@
         b.innerHTML = '<span class="dot"></span><span class="nm">' + esc(p.name) + '</span><span class="rt">' +
           (p.rating ? "★ " + p.rating.toFixed(1) : "—") + "</span>";
         b.addEventListener("click", () => {
-          $("sheet").classList.add("collapsed");
-          $("grip").setAttribute("aria-expanded", "false");
+          setSnap("mid");
           map.easeTo({ center: f.geometry.coordinates, zoom: Math.max(map.getZoom(), 16), offset: [0, 70] });
           shopPopup(f, "bottom");
         });
@@ -466,6 +534,7 @@
   }).catch((e) => console.error("data load failed", e));
 
   // first paint of static UI before data arrives
+  setSnap("mid");
   setDay(state.day, false);
   renderAttrib();
   document.querySelectorAll("[data-basemap]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.basemap === state.basemap)));
