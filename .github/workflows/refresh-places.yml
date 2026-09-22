@@ -1,0 +1,39 @@
+name: Refresh shops from Google Places
+
+# Manual only. Needs the repo secret GOOGLE_PLACES_API_KEY and the private files
+# data/raw/pois_private.json + anchors_private.json, which are NOT in the repo.
+# Provide them as the secret PRIVATE_POIS_B64 / PRIVATE_ANCHORS_B64 (base64 of each file).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Restore private inputs
+        env:
+          POIS: ${{ secrets.PRIVATE_POIS_B64 }}
+          ANCHORS: ${{ secrets.PRIVATE_ANCHORS_B64 }}
+        run: |
+          mkdir -p data/raw
+          echo "$POIS" | base64 -d > data/raw/pois_private.json
+          echo "$ANCHORS" | base64 -d > data/raw/anchors_private.json
+      - name: Fetch places
+        env:
+          GOOGLE_PLACES_API_KEY: ${{ secrets.GOOGLE_PLACES_API_KEY }}
+        working-directory: scripts
+        run: python fetch_places.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site/data/shops.geojson
+          git diff --cached --quiet || git commit -m "Refresh shops from Google Places"
+          git push

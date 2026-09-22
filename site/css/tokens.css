@@ -1,0 +1,56 @@
+/* Tour Afterglow design tokens (from the Claude Design canvas) */
+:root {
+  --paper: #FBF5EA;
+  --paper-2: #EFE6D4;
+  --surface: #FFFFFF;
+  --ink: #2A2521;
+  --ink-2: #6B6259;
+  --line: #E4D9C6;
+  --persimmon: #B4491A;
+  --mustard: #E3A72F;
+  --teal: #1F6A72;
+  --teal-ink: #FFFFFF;
+  --shadow: 0 2px 10px rgba(42, 37, 33, 0.14);
+
+  --cat-otaku: #7A4FB5;
+  --cat-drugstore: #C23B74;
+  --cat-restaurant: #B4491A;
+  --cat-izakaya: #8E2F24;
+  --cat-supermarket: #3B7F4A;
+  --cat-electronics: #2C62A8;
+  --cat-lifestyle: #B8860B;
+  --cat-clothing: #1F6A72;
+
+  --font-display: "Noto Serif TC", serif;
+  --font-body: "Noto Sans TC", system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, monospace;
+  --radius: 16px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #1E1B18;
+    --paper-2: #2A2622;
+    --surface: #26221E;
+    --ink: #F3ECE0;
+    --ink-2: #B5AA9C;
+    --line: #3A342E;
+    --teal: #3A9AA3;
+    --teal-ink: #10181A;
+    --shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #1E1B18;
+  --paper-2: #2A2622;
+  --surface: #26221E;
+  --ink: #F3ECE0;
+  --ink-2: #B5AA9C;
+  --line: #3A342E;
+  --teal: #3A9AA3;
+  --teal-ink: #10181A;
+  --shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}

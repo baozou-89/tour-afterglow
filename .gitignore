@@ -1,0 +1,16 @@
+# secrets
+key.env
+*.env
+.env*
+
+# private reference material (hotel names, phone numbers, personal info)
+0.Reference/
+
+# raw intermediate data (exact hotel coordinates / names)
+data/raw/
+
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+.claude/
