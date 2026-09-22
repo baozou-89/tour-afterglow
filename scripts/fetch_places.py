@@ -32,8 +32,11 @@ AREAS = {
                 "line": [P("day1"), P("tenjin"), P("nakasu"), P("hakata_st")]},
     "kumamoto": {"days": [2], "kind": "line", "buffer": 400,
                  "line": [P("day2"), (130.7088, 32.8022), (130.7043, 32.8008), (130.6985, 32.7975), P("kumamoto_st")]},
-    "beppu": {"days": [3], "kind": "line", "buffer": 550,
-              "line": [P("day3"), (131.4905, 33.2990), P("beppu_st")]},
+    # Day3: the evening in Beppu is short -> only a walkable circle around the base for drinks / snacks
+    "beppu": {"days": [3], "kind": "circle", "center": P("day3"), "radius": 900},
+    # Day3 free walk in Yufuin: station -> Yunotsubo street -> Floral Village -> Lake Kinrin
+    "yufuin": {"days": [3], "kind": "line", "buffer": 160,
+               "line": [(131.3568, 33.2627), (131.3600, 33.2650), P("yunotsubo"), P("floral_village"), P("kinrinko")]},
     "lalaport": {"days": [4], "kind": "circle", "center": P("lalaport"), "radius": 220},
     "mojiko": {"days": [5], "kind": "circle", "center": P("mojiko_st"), "radius": 450},
     "yahata": {"days": [5], "kind": "circle", "center": (130.8113, 33.8720), "radius": 450},
@@ -64,9 +67,10 @@ GENERIC = {
 AREA_CATS = {
     "fukuoka": ["otaku", "drugstore", "supermarket", "electronics", "lifestyle", "clothing", "restaurant", "izakaya"],
     "kumamoto": ["otaku", "drugstore", "supermarket", "electronics", "lifestyle", "clothing", "restaurant", "izakaya"],
-    "beppu": ["otaku", "drugstore", "supermarket", "electronics", "lifestyle", "clothing", "izakaya"],
+    "beppu": ["drugstore", "supermarket"],
+    "yufuin": ["otaku", "lifestyle", "souvenir"],
     "lalaport": ["otaku", "drugstore", "supermarket", "electronics", "lifestyle", "clothing"],
-    "mojiko": ["otaku", "drugstore", "supermarket", "lifestyle"],
+    "mojiko": ["otaku", "drugstore", "supermarket", "lifestyle", "souvenir"],
     "yahata": ["otaku", "drugstore", "supermarket", "electronics", "lifestyle", "clothing"],
     "outlets": ["otaku", "drugstore", "supermarket", "electronics", "lifestyle", "clothing"],
 }
@@ -199,7 +203,7 @@ for area, cats in AREA_CATS.items():
                     c = classify(pl)
                     if c and c in cats:
                         add(pl, c, area)
-        else:
+        elif cat in GENERIC:
             queries, types = GENERIC[cat]
             for q in queries:
                 for pl in search(q, rect, pages=2):
@@ -207,6 +211,65 @@ for area, cats in AREA_CATS.items():
                             and pl.get("userRatingCount", 0) >= MIN_FOOD["count"]:
                         add(pl, cat, area)
         print(f"{area:9s} {cat:12s} total={len(shops)}")
+
+# Sightseeing streets: small independent shops, searched by theme and categorised by name/type.
+TOURIST_QUERIES = {
+    "yufuin": ["湯の坪街道 お土産", "湯布院 お土産", "由布院 スイーツ", "湯布院 スイーツ", "湯の坪街道 スイーツ",
+               "湯布院 ロールケーキ", "湯布院 プリン", "湯布院 コロッケ", "湯布院 和菓子", "湯布院 チーズケーキ",
+               "湯布院 雑貨", "湯の坪街道 雑貨", "湯布院 キャラクターショップ", "湯布院 スヌーピー",
+               "湯布院 ジブリ どんぐりの森", "湯布院 ミッフィー", "湯布院 フローラルヴィレッジ ショップ",
+               "湯布院 ガラス", "湯布院 猫 雑貨", "湯布院 食べ歩き"],
+    "mojiko": ["門司港 お土産", "門司港レトロ お土産", "門司港 スイーツ", "門司港 バナナ", "門司港レトロ 雑貨",
+               "門司港 キャラクターショップ"],
+}
+CHARACTER = re.compile(r"スヌーピー|snoopy|ピーナッツ|peanuts|どんぐり|ジブリ|トトロ|ミッフィー|miffy|キティ|kitty|リラックマ|"
+                       r"すみっコ|ムーミン|moomin|ピーターラビット|peterrabbit|アリス|alice|キャラクター|ワンピース|ポケモン|"
+                       r"ディズニー|disney|サンリオ|さんりお|sanrio|龍貓|ちいかわ|ねこ雑貨|猫雑貨|ハリネズミ|ふくろう", re.I)
+SOUVENIR_TYPES = {"bakery", "confectionery", "dessert_shop", "candy_store", "chocolate_shop", "ice_cream_shop",
+                  "food_store", "meal_takeaway", "gift_shop", "butcher_shop", "liquor_store", "market", "dessert_restaurant",
+                  "japanese_confectionery_shop", "cake_shop", "pastry_shop", "tea_house"}
+SOUVENIR_WORDS = re.compile(r"土産|みやげ|スイーツ|菓子|ロール|プリン|チーズケーキ|コロッケ|饅頭|まんじゅう|最中|煎餅|せんべい|"
+                            r"バウム|ケーキ|ジェラート|アイス|パン|ベーカリー|和菓|茶屋|豆|味噌|酒|焼酎|ゆず|柚子|バナナ|焼きカレー")
+
+
+def classify_tourist(place):
+    name = norm(place["displayName"]["text"])
+    types = set(place.get("types", []))
+    if EXCLUDE.search(name) or place.get("userRatingCount", 0) < 10 or (place.get("rating") or 0) < 3.0:
+        return None
+    if re.search(r"湯の坪街道$|フローラルヴィレッジ$|ポスト$", name):  # the street / sight itself, a landmark mailbox
+        return None
+    if types & {"lodging", "parking", "spa", "museum", "tourist_attraction", "shopping_mall", "park", "train_station",
+                "bus_station", "transit_station", "place_of_worship", "hotel", "art_gallery"} and not types & (SOUVENIR_TYPES | {"store"}):
+        return None
+    if CHARACTER.search(name):
+        return "otaku"
+    # sit-down cafés / restaurants are not shopping stops (lunch is booked); take-away sweets shops are
+    sweets = types & {"bakery", "confectionery", "dessert_shop", "candy_store", "chocolate_shop", "ice_cream_shop",
+                      "cake_shop", "pastry_shop", "gift_shop", "food_store", "japanese_confectionery_shop"}
+    sitdown = re.search(r"cafe|café|カフェ|茶房|珈琲|珈啡|パフェ|専門店$", name) or         place.get("primaryType", "").endswith(("restaurant", "cafe", "coffee_shop"))
+    if sitdown and not sweets:
+        return None
+    if re.search(r"cafe|café|カフェ|茶房|珈琲|珈啡|焼きカレー", name):  # named cafés stay out even if they sell sweets
+        return None
+    if types & SOUVENIR_TYPES or SOUVENIR_WORDS.search(name):
+        return "souvenir"
+    if types & {"restaurant", "cafe", "bar", "izakaya_restaurant"}:
+        return None  # sit-down meals: lunch is already booked
+    if types & {"store", "home_goods_store", "variety_store", "clothing_store", "jewelry_store", "book_store", "toy_store",
+                "hobby_store", "furniture_store", "discount_store"}:
+        return "lifestyle"
+    return None
+
+
+for area, queries in TOURIST_QUERIES.items():
+    rect = area_rect(AREAS[area])
+    for q in queries:
+        for pl in search(q, rect, pages=2):
+            c = classify(pl) or classify_tourist(pl)
+            if c and c in AREA_CATS[area]:
+                add(pl, c, area)
+    print(f"{area:9s} tourist shops total={len(shops)}")
 
 for area, queries in MALL_QUERIES.items():
     rect = area_rect(AREAS[area])

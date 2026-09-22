@@ -20,7 +20,7 @@ Public GitHub Pages site: a mobile map of shopping spots for the free time after
   - `uncertain.geojson` — places whose location is unknown, drawn as dashed circles. props: `name, days[], radius_m, note`
   - `routes.geojson` — OSRM coach-route estimates. props: `day, seq, from, to, distance_km, duration_min`
   - `shops.geojson` — Google Places shops. props: `id (place_id), name (zh-TW), name_ja, category, days[], area, rating, user_ratings_total, gmaps_url`
-    - `category` ∈ `otaku, drugstore, restaurant, izakaya, supermarket, electronics, lifestyle, clothing`
+    - `category` ∈ `otaku, drugstore, restaurant, izakaya, supermarket, electronics, lifestyle, clothing, souvenir` (souvenir = 伴手禮・甜點; used on Day3 Yufuin and Day5 Mojiko)
     - `gmaps_url` = `https://www.google.com/maps/search/?api=1&query=<name>&query_place_id=<place_id>` (opens the Google Maps app on phones)
   - `transit.geojson` — bus/tram lines (MultiLineString). props: `days[], to, mode (bus|tram), ref, name, operator, headway_min|null`
 - `scripts/` — Python (stdlib + certifi) data pipeline, run locally with the key in `key.env`:

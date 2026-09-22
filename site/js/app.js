@@ -10,6 +10,7 @@
     electronics: { label: "電器", color: "#2C62A8" },
     lifestyle: { label: "生活雜貨", color: "#B8860B" },
     clothing: { label: "服飾", color: "#1F6A72" },
+    souvenir: { label: "伴手禮・甜點", color: "#E8590C" },
   };
   const GSI = '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">出典：国土地理院</a>';
   const OSM = '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>';
@@ -59,6 +60,7 @@
     basemap: { pale: "gsipale" }[store.get("ta.basemap")] || (BASEMAPS[store.get("ta.basemap")] ? store.get("ta.basemap") : "gsipale"),
     annoOff: new Set((store.get("ta.annoOff") || "").split(",").filter(Boolean)),
     annoPanel: false,
+    alt: false, // viewing the day's secondary area (e.g. Day3 evening base in Beppu)
     cats: new Set(Object.keys(CATS)),
     routes: true,
     transit: true,
@@ -266,6 +268,7 @@
     $("dayTitle").textContent = cfg.title;
     $("dayArea").textContent = cfg.area;
     daysNav.querySelectorAll("button").forEach((b) => b.setAttribute("aria-selected", String(+b.dataset.day === d)));
+    state.alt = false;
     map.fitBounds(cfg.bounds, { padding: fitPadding(), duration: animate ? 900 : 0 });
     if (data.shops) { applyFilters(); renderMarkers(); renderChips(); renderList(); }
   }
@@ -314,6 +317,21 @@
     const lw = $("layerChips");
     lw.textContent = "";
     const has = (fc) => fc.features.some((f) => f.properties.days.includes(state.day));
+    const cfg = TRIP.days[state.day];
+    if (cfg.alt) { // jump between the day's main area and its secondary area
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip";
+      b.style.setProperty("--c", "#6B5847");
+      b.setAttribute("aria-pressed", "true");
+      b.textContent = "→ " + (state.alt ? cfg.mainLabel : cfg.alt.label);
+      b.addEventListener("click", () => {
+        state.alt = !state.alt;
+        map.fitBounds(state.alt ? cfg.alt.bounds : cfg.bounds, { padding: fitPadding(), duration: 900 });
+        renderChips();
+      });
+      lw.appendChild(b);
+    }
     [["pois", "景點・車站", "#6B5847", true], ["routes", "行車路線", "#B4491A", true],
       ["transit", "公車・市電", "#1F6A72", has(data.transit)], ["uncertain", "位置未定", "#B4491A", has(data.uncertain)],
     ].forEach(([k, label, color, ok]) => {
