@@ -37,6 +37,7 @@ AREAS = {
     "lalaport": {"days": [4], "kind": "circle", "center": P("lalaport"), "radius": 220},
     "mojiko": {"days": [5], "kind": "circle", "center": P("mojiko_st"), "radius": 450},
     "yahata": {"days": [5], "kind": "circle", "center": (130.8113, 33.8720), "radius": 450},
+    "outlets": {"days": [5], "kind": "circle", "center": P("outlets_kitakyushu"), "radius": 300},
 }
 
 # "search term|alias|alias": a result is kept only if its name contains one of the aliases
@@ -67,6 +68,7 @@ AREA_CATS = {
     "lalaport": ["otaku", "drugstore", "supermarket", "electronics", "lifestyle", "clothing"],
     "mojiko": ["otaku", "drugstore", "supermarket", "lifestyle"],
     "yahata": ["otaku", "drugstore", "supermarket", "electronics", "lifestyle", "clothing"],
+    "outlets": ["otaku", "drugstore", "supermarket", "electronics", "lifestyle", "clothing"],
 }
 MIN_FOOD = {"rating": 3.7, "count": 80, "keep": 30}
 
@@ -157,6 +159,37 @@ def add(place, cat, area):
             s["props"]["days"].append(d)
 
 
+# Malls whose tenants are mostly brands outside BRANDS: search the mall itself and
+# categorise every shop by its Google place types.
+MALL_QUERIES = {
+    "outlets": ["THE OUTLETS KITAKYUSHU", "ジ アウトレット北九州", "ジ アウトレット北九州 ファッション",
+                "ジ アウトレット北九州 スポーツ", "ジ アウトレット北九州 シューズ", "ジ アウトレット北九州 アウトドア",
+                "ジ アウトレット北九州 雑貨", "ジ アウトレット北九州 バッグ", "ジ アウトレット北九州 キッズ",
+                "ジ アウトレット北九州 ファクトリーストア", "ジ アウトレット北九州 おもちゃ"],
+}
+TYPE_CATS = [
+    ({"clothing_store", "shoe_store", "sporting_goods_store", "jewelry_store"}, "clothing"),
+    ({"electronics_store", "cell_phone_store"}, "electronics"),
+    ({"drugstore", "pharmacy", "cosmetics_store", "beauty_salon"}, "drugstore"),
+    ({"supermarket", "grocery_store"}, "supermarket"),
+    ({"toy_store", "hobby_store", "book_store", "video_game_store"}, "otaku"),
+    ({"home_goods_store", "variety_store", "discount_store", "gift_shop", "furniture_store", "store"}, "lifestyle"),
+]
+
+
+def classify_by_type(place):
+    name = norm(place["displayName"]["text"])
+    types = set(place.get("types", []))
+    if EXCLUDE.search(name) or place.get("userRatingCount", 0) < 3 or name in ("theoutletskitakyushu", "ジアウトレット北九州"):
+        return None
+    if types & {"shopping_mall", "parking", "restaurant", "cafe", "food", "meal_takeaway", "bakery"} and not types & {"clothing_store", "shoe_store"}:
+        return None
+    for ts, cat in TYPE_CATS:
+        if types & ts:
+            return cat
+    return None
+
+
 for area, cats in AREA_CATS.items():
     rect = area_rect(AREAS[area])
     for cat in cats:
@@ -174,6 +207,15 @@ for area, cats in AREA_CATS.items():
                             and pl.get("userRatingCount", 0) >= MIN_FOOD["count"]:
                         add(pl, cat, area)
         print(f"{area:9s} {cat:12s} total={len(shops)}")
+
+for area, queries in MALL_QUERIES.items():
+    rect = area_rect(AREAS[area])
+    for q in queries:
+        for pl in search(q, rect, pages=3):
+            c = classify(pl) or classify_by_type(pl)
+            if c and c in AREA_CATS[area]:
+                add(pl, c, area)
+    print(f"{area:9s} mall tenants total={len(shops)}")
 
 # food: keep only the best per area
 for cat in ("restaurant", "izakaya"):

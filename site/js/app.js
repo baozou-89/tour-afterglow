@@ -326,8 +326,10 @@
         "text-radial-offset": 0.8,
         "text-justify": "auto",
         "text-max-width": 9,
-        "text-allow-overlap": true,
-        "text-ignore-placement": true,
+        "text-padding": 2,
+        // collision detection on: labels try 4 positions, then hide; best-rated shops placed first
+        "symbol-sort-key": ["*", -1, ["*", ["coalesce", ["get", "rating"], 0],
+          ["log10", ["+", ["coalesce", ["get", "user_ratings_total"], 0], 10]]]],
       }, paint: {
         "text-color": catColor,
         "text-halo-color": "#FFFFFF",

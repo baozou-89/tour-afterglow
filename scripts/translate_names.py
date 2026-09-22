@@ -13,7 +13,7 @@ from pathlib import Path
 
 from common import PUBLIC, RAW, http_json, load_key
 
-KANA = re.compile(r"[぀-ヿ]")
+KANA = re.compile(r"[぀-ヺー-ヿ]")  # kana, but not the middle dot
 HAN = re.compile(r"[一-鿿]")
 CACHE = RAW / "places_zh"
 CACHE.mkdir(parents=True, exist_ok=True)
@@ -48,6 +48,22 @@ GLOSSARY = {
     "レガネットマルシェ": "Reganet Marché ", "レガネット": "Reganet 超市 ", "サニー": "SUNNY 超市 ",
     "マルショク": "Marushoku 超市 ", "ゆめマート": "Yume Mart 超市 ", "トキハインダストリー": "TOKIWA Industry 超市 ",
     "アテオ": "ATEO ", "イオン": "AEON ", "スピナ": "SPINA ", "トライアル": "TRIAL ",
+    # THE OUTLETS KITAKYUSHU tenants
+    "ジ アウトレット北九州": "THE OUTLETS 北九州", "ジアウトレット北九州": "THE OUTLETS 北九州",
+    "ジ・アウトレット北九州": "THE OUTLETS 北九州", "ジ·アウトレット北九州": "THE OUTLETS 北九州",
+    "ジ アウトレット 北九州": "THE OUTLETS 北九州", "ファクトリーアウトレット": "Factory Outlet ",
+    "ファクトリーストア": "Factory Store ", "ファクトリーハウス": "Factory House ", "アウトレットストア": "Outlet Store ",
+    "アウトレット": "Outlet ", "コロンビア": "Columbia ", "オークリーボルト": "Oakley Vault ", "グラニフ": "graniph ",
+    "東京ソワール": "東京 SOIR ", "マイケル･コース": "Michael Kors ", "アディダスゴルフ": "adidas Golf ", "アディダス": "adidas ",
+    "チャイハネ": "Chaihane ", "モンベル": "mont-bell ", "ムラサキスポーツ": "Murasaki Sports ", "フクスケ": "福助 ",
+    "リーバイス": "Levi's ", "アンダーアーマー": "UNDER ARMOUR ", "ビームス": "BEAMS ", "マーキーズ": "Markey's ",
+    "トミーヒルフィガー": "Tommy Hilfiger ", "コーチ": "COACH ", "(ニコル)": "", "ニューバランス": "New Balance ",
+    "ダイアナ": "DIANA ", "プーマ": "PUMA ", "ロゴスショップ": "LOGOS Shop ", "カルバン・クライン": "Calvin Klein ",
+    "アーヴェヴェ": "", "セルレ": "CELLURE 美妝 ", "クラッシュゲート×関家具": "Crash Gate × 關家具 ",
+    "ペットパラダイス": "Pet Paradise 寵物用品 ", "SN NISHIKAWA × じぶんまくら": "西川 × 自分枕 ", "じぶんまくら": "自分枕 ",
+    "ティファール": "T-fal ", "シルバニアファミリー森のお家": "森林家族 森之家", "ジグソーパズルのお店マスターピース": "拼圖專賣店 Masterpiece",
+    "韓美膳": "韓美膳 韓國食品 ", "帽子屋OUTLET": "帽子屋 OUTLET ", "帽子屋": "帽子屋 ",
+    "THE OUTLETS KITAKYUSHU": "THE OUTLETS 北九州", "KITAKYUSHU": "北九州", "Kitakyushu": "北九州",
     # places / malls
     "アミュプラザくまもと": "AMU PLAZA 熊本", "アミュプラザ博多": "AMU PLAZA 博多", "アミュプラザ": "AMU PLAZA ",
     "アミュエスト": "AMU EST ", "キャナルシティオーパ": "運河城 OPA ", "キャナルシティ博多": "博多運河城",
@@ -99,6 +115,8 @@ for f in fc["features"]:
         name = google
     else:
         name = glossary(p["name_ja"])
+    if p["area"] == "outlets":  # inside the mall the mall name is noise
+        name = re.sub(r"\s*THE OUTLETS 北九州店?$|\s*北九州店?$", "", name).strip() or name
     p["name"] = name
     if KANA.search(name) or (p["category"] in FOOD and p["id"] not in overrides and not good_zh(google)):
         todo[p["id"]] = [p["name_ja"], google]
